@@ -11,6 +11,7 @@ const config = {
   base: "0xdd4536dD9636564D891c919416880a3e250f975A",
 };
 
+const ethereumFactory = "0xB878DC600550367e14220d4916Ff678fB284214F";
 const USDN_PROTOCOL_ADDRESS = "0x656cB8C6d154Aad29d8771384089be5B5141f01a";
 const USDN_TOKEN_ADDRESS = "0xde17a000ba631c5d7c2bd9fb692efea52d90dee2";
 const WSTETH_TOKEN_ADDRESS = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
@@ -34,20 +35,18 @@ async function fetchUSDNData(api, block) {
 
   const formattedWstEthPrice = BigInt(Math.round(wstEthPrice * 10 ** 18));
 
-  const usdnVaultAssetAvailableWithFundingCall = sdk.api.abi.call({
+  const getBalanceVaultCall = sdk.api.abi.call({
     target: USDN_PROTOCOL_ADDRESS,
-    abi: usdnProtocolAbi.find((m) => m.name === "vaultAssetAvailableWithFunding"),
+    abi: usdnProtocolAbi.find((m) => m.name === "getBalanceVault"),
     chain,
     block,
-    params: [formattedWstEthPrice, BigInt(timestamp)],
   });
 
-  const usdnLongAssetAvailableWithFundingCall = sdk.api.abi.call({
+  const getBalanceLongCall = sdk.api.abi.call({
     target: USDN_PROTOCOL_ADDRESS,
-    abi: usdnProtocolAbi.find((m) => m.name === "longAssetAvailableWithFunding"),
+    abi: usdnProtocolAbi.find((m) => m.name === "getBalanceLong"),
     chain,
     block,
-    params: [formattedWstEthPrice, BigInt(timestamp)],
   });
 
   const rebalancerCurrentStateDataCall = sdk.api.abi.call({
@@ -57,34 +56,37 @@ async function fetchUSDNData(api, block) {
     block,
   });
 
-  const [usdnVaultAssetAvailableWithFunding, usdnLongAssetAvailableWithFunding, rebalancerCurrentStateData] =
-    await Promise.all([
-      usdnVaultAssetAvailableWithFundingCall,
-      usdnLongAssetAvailableWithFundingCall,
-      rebalancerCurrentStateDataCall,
-    ]);
+  const [balanceVault, balanceLong, rebalancerCurrentStateData] = await Promise.all([
+    getBalanceVaultCall,
+    getBalanceLongCall,
+    rebalancerCurrentStateDataCall,
+  ]);
 
   return {
-    usdnVaultAssetAvailableWithFunding: BigInt(usdnVaultAssetAvailableWithFunding.output),
-    usdnLongAssetAvailableWithFunding: BigInt(usdnLongAssetAvailableWithFunding.output),
-    rebalancerCurrentStateData: BigInt(rebalancerCurrentStateData.output[0]),
+    getBalanceVault: BigInt(balanceVault.output),
+    getBalanceLong: BigInt(balanceLong.output),
+    rebalancerPendingAssets: BigInt(rebalancerCurrentStateData.output[0]),
     wstEthPrice: formattedWstEthPrice,
   };
 }
 
-const getEthereumTVL = async (api, block) => {
+const getEthereumTVL = async (api, block, chainBlocks) => {
   const usdnData = await fetchUSDNData(api, block);
 
-  const tvl = Number(
-    ((usdnData.usdnLongAssetAvailableWithFunding +
-      usdnData.usdnVaultAssetAvailableWithFunding +
-      usdnData.rebalancerCurrentStateData) *
-      usdnData.wstEthPrice) /
+  const usdnTVL = Number(
+    ((usdnData.getBalanceLong + usdnData.getBalanceVault + usdnData.rebalancerPendingAssets) * usdnData.wstEthPrice) /
       BigInt(10 ** 18)
   ).toExponential();
 
+  const uniTVL = await getUniTVL({ factory: ethereumFactory, fetchBalances: true, useDefaultCoreAssets: false })(
+    api,
+    block,
+    chainBlocks
+  );
+
   return {
-    [`ethereum:${USDN_TOKEN_ADDRESS}`]: tvl,
+    ...uniTVL,
+    [`ethereum:${USDN_TOKEN_ADDRESS}`]: usdnTVL,
   };
 };
 
