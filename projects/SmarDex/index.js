@@ -1,7 +1,7 @@
 const sdk = require("@defillama/sdk");
 const { getUniTVL } = require("../helper/unknownTokens");
 const { stakings } = require("../helper/staking");
-const { usdnProtocolAbi, rebalancerAbi, wStEthAbi } = require("./abis");
+const { usdnProtocolAbi, rebalancerAbi } = require("./abis");
 const { fetchURL } = require("../helper/utils");
 
 const config = {
@@ -16,27 +16,30 @@ const USDN_TOKEN_ADDRESS = "0xde17a000ba631c5d7c2bd9fb692efea52d90dee2";
 const WSTETH_TOKEN_ADDRESS = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const REBALANCER_ADDRESS = "0xaebcc85a5594e687f6b302405e6e92d616826e03";
 
+const getWstEthPriceAtTimestamp = async (chain, timestamp) => {
+  const prices = (
+    await fetchURL(`https://coins.llama.fi/prices/historical/${timestamp}/${chain}:${WSTETH_TOKEN_ADDRESS}`)
+  ).data.coins;
+  const wstETHResult = prices[`${chain}:${WSTETH_TOKEN_ADDRESS}`];
+  if (!wstETHResult) {
+    throw new Error("No price data found for wstETH");
+  }
+  return wstETHResult.price;
+};
+
 async function fetchUSDNData(api, block) {
   const { timestamp, chain } = api;
 
-  const ethPrice = (await fetchURL("https://coins.llama.fi/prices/current/coingecko:ethereum")).data.coins[
-    "coingecko:ethereum"
-  ].price;
+  const wstEthPrice = await getWstEthPriceAtTimestamp(chain, timestamp);
 
-  const stEthPerToken = await sdk.api.abi.call({
-    target: WSTETH_TOKEN_ADDRESS,
-    abi: wStEthAbi.find((m) => m.name === "stEthPerToken"),
-    chain,
-    block,
-  });
-  const wstEthPrice = BigInt(ethPrice * Number(stEthPerToken.output));
+  const formattedWstEthPrice = BigInt(Math.round(wstEthPrice * 10 ** 18));
 
   const usdnVaultAssetAvailableWithFundingCall = sdk.api.abi.call({
     target: USDN_PROTOCOL_ADDRESS,
     abi: usdnProtocolAbi.find((m) => m.name === "vaultAssetAvailableWithFunding"),
     chain,
     block,
-    params: [wstEthPrice, BigInt(timestamp)],
+    params: [formattedWstEthPrice, BigInt(timestamp)],
   });
 
   const usdnLongAssetAvailableWithFundingCall = sdk.api.abi.call({
@@ -44,7 +47,7 @@ async function fetchUSDNData(api, block) {
     abi: usdnProtocolAbi.find((m) => m.name === "longAssetAvailableWithFunding"),
     chain,
     block,
-    params: [wstEthPrice, BigInt(timestamp)],
+    params: [formattedWstEthPrice, BigInt(timestamp)],
   });
 
   const rebalancerCurrentStateDataCall = sdk.api.abi.call({
@@ -65,7 +68,7 @@ async function fetchUSDNData(api, block) {
     usdnVaultAssetAvailableWithFunding: BigInt(usdnVaultAssetAvailableWithFunding.output),
     usdnLongAssetAvailableWithFunding: BigInt(usdnLongAssetAvailableWithFunding.output),
     rebalancerCurrentStateData: BigInt(rebalancerCurrentStateData.output[0]),
-    wstEthPrice,
+    wstEthPrice: formattedWstEthPrice,
   };
 }
 
