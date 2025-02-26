@@ -1,19 +1,102 @@
+const sdk = require("@defillama/sdk");
 const { getUniTVL } = require("../helper/unknownTokens");
 const { stakings } = require("../helper/staking");
+const { usdnProtocolAbi, rebalancerAbi, wStEthAbi } = require("./abis");
+const { fetchURL } = require("../helper/utils");
 
 const config = {
-  ethereum: '0xB878DC600550367e14220d4916Ff678fB284214F',
-  bsc: '0xA8EF6FEa013034E62E2C4A9Ec1CDb059fE23Af33',
-  polygon: '0x9A1e1681f6D59Ca051776410465AfAda6384398f',
-  arbitrum: '0x41A00e3FbE7F479A99bA6822704d9c5dEB611F22',
-  base: '0xdd4536dD9636564D891c919416880a3e250f975A',
+  bsc: "0xA8EF6FEa013034E62E2C4A9Ec1CDb059fE23Af33",
+  polygon: "0x9A1e1681f6D59Ca051776410465AfAda6384398f",
+  arbitrum: "0x41A00e3FbE7F479A99bA6822704d9c5dEB611F22",
+  base: "0xdd4536dD9636564D891c919416880a3e250f975A",
+};
+
+const USDN_PROTOCOL_ADDRESS = "0x656cB8C6d154Aad29d8771384089be5B5141f01a";
+const USDN_TOKEN_ADDRESS = "0xde17a000ba631c5d7c2bd9fb692efea52d90dee2";
+const WSTETH_TOKEN_ADDRESS = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+const REBALANCER_ADDRESS = "0xaebcc85a5594e687f6b302405e6e92d616826e03";
+
+async function fetchUSDNData(api, block) {
+  const { timestamp, chain } = api;
+
+  const ethPrice = (await fetchURL("https://coins.llama.fi/prices/current/coingecko:ethereum")).data.coins[
+    "coingecko:ethereum"
+  ].price;
+
+  const stEthPerToken = await sdk.api.abi.call({
+    target: WSTETH_TOKEN_ADDRESS,
+    abi: wStEthAbi.find((m) => m.name === "stEthPerToken"),
+    chain,
+    block,
+  });
+  const wstEthPrice = BigInt(ethPrice * Number(stEthPerToken.output));
+
+  const usdnVaultAssetAvailableWithFundingCall = sdk.api.abi.call({
+    target: USDN_PROTOCOL_ADDRESS,
+    abi: usdnProtocolAbi.find((m) => m.name === "vaultAssetAvailableWithFunding"),
+    chain,
+    block,
+    params: [wstEthPrice, BigInt(timestamp)],
+  });
+
+  const usdnLongAssetAvailableWithFundingCall = sdk.api.abi.call({
+    target: USDN_PROTOCOL_ADDRESS,
+    abi: usdnProtocolAbi.find((m) => m.name === "longAssetAvailableWithFunding"),
+    chain,
+    block,
+    params: [wstEthPrice, BigInt(timestamp)],
+  });
+
+  const rebalancerCurrentStateDataCall = sdk.api.abi.call({
+    target: REBALANCER_ADDRESS,
+    abi: rebalancerAbi.find((m) => m.name === "getCurrentStateData"),
+    chain,
+    block,
+  });
+
+  const [usdnVaultAssetAvailableWithFunding, usdnLongAssetAvailableWithFunding, rebalancerCurrentStateData] =
+    await Promise.all([
+      usdnVaultAssetAvailableWithFundingCall,
+      usdnLongAssetAvailableWithFundingCall,
+      rebalancerCurrentStateDataCall,
+    ]);
+
+  return {
+    usdnVaultAssetAvailableWithFunding: BigInt(usdnVaultAssetAvailableWithFunding.output),
+    usdnLongAssetAvailableWithFunding: BigInt(usdnLongAssetAvailableWithFunding.output),
+    rebalancerCurrentStateData: BigInt(rebalancerCurrentStateData.output[0]),
+    wstEthPrice,
+  };
 }
 
-Object.keys(config).forEach(chain => {
-  const factory = config[chain]
-  module.exports[chain] = {
-    tvl: getUniTVL({ factory, fetchBalances: true, useDefaultCoreAssets: false })
-  }
-})
+const getEthereumTVL = async (api, block) => {
+  const usdnData = await fetchUSDNData(api, block);
 
-module.exports.ethereum.staking = stakings(["0xB940D63c2deD1184BbdE059AcC7fEE93654F02bf", "0x80497049b005Fd236591c3CD431DBD6E06eB1A31",], "0x5de8ab7e27f6e7a1fff3e5b337584aa43961beef")
+  const tvl = Number(
+    ((usdnData.usdnLongAssetAvailableWithFunding +
+      usdnData.usdnVaultAssetAvailableWithFunding +
+      usdnData.rebalancerCurrentStateData) *
+      usdnData.wstEthPrice) /
+      BigInt(10 ** 18)
+  ).toExponential();
+
+  return {
+    [`ethereum:${USDN_TOKEN_ADDRESS}`]: tvl,
+  };
+};
+
+Object.keys(config).forEach((chain) => {
+  const factory = config[chain];
+  module.exports[chain] = {
+    tvl: getUniTVL({ factory, fetchBalances: true, useDefaultCoreAssets: false }),
+  };
+});
+
+module.exports["ethereum"] = {
+  timetravel: false,
+  tvl: getEthereumTVL,
+  staking: stakings(
+    ["0xB940D63c2deD1184BbdE059AcC7fEE93654F02bf", "0x80497049b005Fd236591c3CD431DBD6E06eB1A31"],
+    "0x5de8ab7e27f6e7a1fff3e5b337584aa43961beef"
+  ),
+};
