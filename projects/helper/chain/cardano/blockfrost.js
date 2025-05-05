@@ -59,6 +59,10 @@ async function addressesUtxosAssetAll(address, asset) {
   return addresses
 }
 
+async function getTxUtxos(tx_hash) {
+  const { data } = await axiosObj.get(`txs/${tx_hash}/utxos`)
+  return data
+}
 
 async function getTxsRedeemers(utxo) {
   const { data } = await axiosObj.get(`txs/${utxo}/redeemers`)
@@ -70,6 +74,11 @@ async function getTxsMetadata(utxo) {
   return data
 }
 
+async function getScriptsDatum(datumHash) {
+  const { data } = await axiosObj.get(`scripts/datum/${datumHash}`)
+  return data
+}
+
 async function getTokensMinted(tokenId){
   const {data} = await axiosObj.get(`assets/${tokenId}`)
   return Number(data.quantity)
@@ -78,9 +87,11 @@ async function getTokensMinted(tokenId){
 module.exports = {
   getAssets,
   getAddressesUTXOs,
+  getTxUtxos,
   getTxsRedeemers,
   getTxsMetadata,
   assetsAddresses,
   addressesUtxosAssetAll,
   getTokensMinted,
+  getScriptsDatum,
 }

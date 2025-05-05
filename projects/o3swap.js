@@ -1,20 +1,5 @@
-const { default: BigNumber } = require('bignumber.js');
-const { get } = require('./helper/http')
-
-let data
-
-async function getData() {
-    if (!data) data = get('https://api.o3swap.com/v1/statistics')
-    return data
-}
-
 async function fetch() {
-    const tvl = await getData()
-    let totalTvl = new BigNumber(0)
-    tvl.data.tvls.forEach(item => {
-        totalTvl = totalTvl.plus(new BigNumber(item.tvl))
-    });
-    return totalTvl.toFixed();
+    return 0
 }
 
 const chains = {
@@ -40,11 +25,11 @@ module.exports = {
             ...exp,
             [chain]: {
                 fetch: async () => {
-                    const tvl = await getData()
-                    return tvl.data.tvls.find(item => item.chain_id === id).tvl
+                    return 0
                 }
             }
         }
     }, {}),
     fetch,
+    deadFrom: '2024-09-30',
 }
