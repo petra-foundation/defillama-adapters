@@ -39,9 +39,13 @@ interface ApiResponse {
   positions: Position[];
 }
 
+if(!process.env.SMARDEX_USDN_API_KEY) {
+  throw new Error("Missing SMARDEX_USDN_API_KEY environment variable");
+}
+
 const WSTETH_KEY = "ethereum:0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
 const API_URL = "https://usdn-public.api.smardex.io/usdn/positions/open";
-const API_KEY = ""; // TODO: Add Smardex USDN Partner API key
+const API_KEY = process.env.SMARDEX_USDN_API_KEY
 const EXPLORER_BASE_URL = "https://smardex.io/usdn/explorer?search=";
 
 const fetchOpenPositions = async (): Promise<Position[]> => {
