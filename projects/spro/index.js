@@ -3,7 +3,7 @@ const headers = {
   referer: "https://subgraph.satsuma-prod.com",
 };
 
-const subgraphUrl = "https://subgraph.satsuma-prod.com/28e9d214a5ae/stephanes-team/prod-spro-ethereum-subgraph/api";
+const subgraphUrl = "https://subgraph.smardex.io/ethereum/spro";
 
 const getTokenMetrics = async () => {
   const tokenMetricsQuery = `{
