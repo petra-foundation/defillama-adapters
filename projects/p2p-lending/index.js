@@ -45,4 +45,4 @@ module.exports = {
     borrowed: () => getData(true),
   },
 };
-// node test.js projects/spro/index.js
+// node test.js projects/p2p-lending/index.js
