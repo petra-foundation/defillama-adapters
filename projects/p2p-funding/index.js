@@ -1,6 +1,6 @@
 const headers = {
-  origin: "https://subgraph.satsuma-prod.com",
-  referer: "https://subgraph.satsuma-prod.com",
+  origin: "https://subgraph.smardex.io",
+  referer: "https://subgraph.smardex.io",
 };
 
 const subgraphUrl = "https://subgraph.smardex.io/ethereum/spro";
